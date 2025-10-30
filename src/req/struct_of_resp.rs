@@ -1,10 +1,15 @@
-use super::QUOTES;
+use anyhow::bail;
 use reqwest::Client;
 use serde::Deserialize;
+
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use std::collections::HashMap;
 
+use super::{CallData, Token};
+
 #[allow(dead_code)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug,Clone, Deserialize)]
 pub struct Config {
     pub sell_tokens: String,
     pub buy_tokens: String,
@@ -96,6 +101,8 @@ pub struct QuoteResponse {
     pub tx: Tx,
 }
 
+
+#[allow(dead_code)]
 pub async fn get_quote(
     base_url: &str,
     sell_tokens: &str,
@@ -103,6 +110,8 @@ pub async fn get_quote(
     sell_amounts: Option<u128>,
     buy_amounts: Option<u128>,
     taker_address: &str,
+    quotes: Arc<RwLock<HashMap<Token, CallData>>>,
+
 ) -> Result<(), anyhow::Error> {
     let client = Client::new();
     let mut params = HashMap::new();
@@ -128,20 +137,17 @@ pub async fn get_quote(
 
     if !res.status().is_success() {
         let txt = res.text().await?;
-        panic!("Error response: {}", txt);
+        bail!("Error response: {}", txt);
     }
 
     let parsed: QuoteResponse = res.json().await?;
-    // println!("{:?}", parsed);
     {
-        let mut cache = QUOTES.write().await;
+        let mut cache = quotes.write().await;
         cache
             .entry((buy_tokens.to_string(), sell_tokens.to_string()))
             .or_default()
             .push(parsed.tx.data.clone());
     }
-    println!("QUOTES: {:?}", QUOTES.read().await);
     Ok(())
 
-    // Ok(parsed)
 }
